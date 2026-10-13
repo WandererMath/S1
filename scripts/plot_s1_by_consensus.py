@@ -134,7 +134,135 @@ def enrichment_table(merged: pd.DataFrame, clusters: list[int]) -> pd.DataFrame:
     return table
 
 
-def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Path) -> None:
+def significant_pairs(enrichment: pd.DataFrame) -> set[tuple[int, str]]:
+    return {
+        (int(row.cluster), row.s1_classification)
+        for row in enrichment.itertuples()
+        if row.q_value_bh < 0.05 and row.fold_enrichment > 1
+    }
+
+
+def plot_s1_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Path) -> None:
+    counts = (
+        merged.groupby(["S1_display_classification", "cluster"])
+        .size()
+        .unstack(fill_value=0)
+        .reindex(index=DISPLAY_ORDER, fill_value=0)
+    )
+    clusters = sorted(counts.columns.tolist())
+    colors = plt.get_cmap("tab20")(np.arange(len(clusters)))
+    cluster_colors = dict(zip(clusters, colors))
+    significant = significant_pairs(enrichment)
+
+    y = np.arange(len(DISPLAY_ORDER))
+    fig, axis = plt.subplots(figsize=(14, max(5, len(DISPLAY_ORDER) * 0.62 + 2)))
+    max_total = int(counts.sum(axis=1).max())
+    for index, classification in enumerate(DISPLAY_ORDER):
+        left = 0
+        row = counts.loc[classification]
+        for cluster, count in sorted(
+            row.items(),
+            key=lambda item: (-item[1], item[0]),
+        ):
+            if count == 0:
+                continue
+            axis.barh(index, count, left=left, height=0.8, color=cluster_colors[cluster])
+            if count >= max(8, max_total * 0.035):
+                marker = "*" if any((int(cluster), label) in significant for label in DISPLAY_MEMBERSHIPS[classification]) else ""
+                axis.text(
+                    left + count / 2,
+                    index,
+                    f"{int(count)}{marker}",
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=9,
+                    fontweight="bold" if marker else "normal",
+                )
+            left += int(count)
+        axis.text(left + max_total * 0.012, index, str(int(row.sum())), va="center", fontsize=9)
+
+    axis.set_yticks(y)
+    axis.set_yticklabels([LABELS[classification] for classification in DISPLAY_ORDER])
+    axis.invert_yaxis()
+    axis.set_xlabel("Gene count")
+    axis.set_ylabel("S1 classification")
+    axis.set_title("Predicted consensus cluster counts by S1 classification")
+    axis.legend(
+        handles=[Patch(color=cluster_colors[cluster], label=f"Cluster {cluster}") for cluster in clusters],
+        title="Predicted consensus cluster",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0,
+    )
+    axis.grid(axis="x", alpha=0.25)
+    axis.set_axisbelow(True)
+    fig.tight_layout(rect=(0, 0, 0.8, 1))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, format="pdf", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_s1_fractions(merged: pd.DataFrame, output_path: Path) -> None:
+    counts = (
+        merged.groupby(["S1_display_classification", "cluster"])
+        .size()
+        .unstack(fill_value=0)
+        .reindex(index=DISPLAY_ORDER, fill_value=0)
+    )
+    fractions = counts.div(counts.sum(axis=1).replace(0, np.nan), axis=0).fillna(0)
+    clusters = sorted(fractions.columns.tolist())
+    colors = plt.get_cmap("tab20")(np.arange(len(clusters)))
+    cluster_colors = dict(zip(clusters, colors))
+
+    y = np.arange(len(DISPLAY_ORDER))
+    fig, axis = plt.subplots(figsize=(14, max(5, len(DISPLAY_ORDER) * 0.62 + 2)))
+    for index, classification in enumerate(DISPLAY_ORDER):
+        left = 0.0
+        row = fractions.loc[classification]
+        for cluster, fraction in sorted(
+            row.items(),
+            key=lambda item: (-item[1], item[0]),
+        ):
+            if fraction == 0:
+                continue
+            axis.barh(index, fraction, left=left, height=0.8, color=cluster_colors[cluster])
+            if fraction >= 0.06:
+                axis.text(
+                    left + fraction / 2,
+                    index,
+                    f"{fraction:.0%}",
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=9,
+                )
+            left += float(fraction)
+
+    axis.set_yticks(y)
+    axis.set_yticklabels([LABELS[classification] for classification in DISPLAY_ORDER])
+    axis.invert_yaxis()
+    axis.set_xlim(0, 1)
+    axis.set_xlabel("Fraction of genes")
+    axis.set_ylabel("S1 classification")
+    axis.set_title("Predicted consensus cluster fractions by S1 classification")
+    axis.xaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f"{value:.0%}"))
+    axis.legend(
+        handles=[Patch(color=cluster_colors[cluster], label=f"Cluster {cluster}") for cluster in clusters],
+        title="Predicted consensus cluster",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0,
+    )
+    axis.grid(axis="x", alpha=0.25)
+    axis.set_axisbelow(True)
+    fig.tight_layout(rect=(0, 0, 0.8, 1))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, format="pdf", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_cluster_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Path) -> None:
     counts = (
         merged.groupby(["cluster", "S1_display_classification"])
         .size()
@@ -145,11 +273,7 @@ def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Pat
     clusters = counts.index.tolist()
     colors = plt.get_cmap("tab20")(np.arange(len(DISPLAY_ORDER)))
     class_colors = dict(zip(DISPLAY_ORDER, colors))
-    significant = {
-        (int(row.cluster), row.s1_classification)
-        for row in enrichment.itertuples()
-        if row.q_value_bh < 0.05 and row.fold_enrichment > 1
-    }
+    significant = significant_pairs(enrichment)
 
     y = np.arange(len(clusters))
     fig, axis = plt.subplots(figsize=(14, max(5, len(clusters) * 0.62 + 2)))
@@ -182,9 +306,9 @@ def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Pat
     axis.set_yticks(y)
     axis.set_yticklabels([f"Consensus cluster {cluster}" for cluster in clusters])
     axis.invert_yaxis()
-    axis.set_xlabel("S1-classified gene count")
+    axis.set_xlabel("Gene count")
     axis.set_ylabel("Predicted consensus cluster")
-    axis.set_title("Experimental S1 classification counts by predicted consensus cluster")
+    axis.set_title("S1 classification counts by predicted consensus cluster")
     axis.legend(
         handles=[Patch(color=class_colors[classification], label=LABELS[classification]) for classification in DISPLAY_ORDER],
         title="S1 classification",
@@ -235,7 +359,7 @@ Because multiple cluster-by-class combinations are tested, p-values are adjusted
 
 ## Plot annotation
 
-The PDF uses a horizontal stacked-bar layout matching the tax result plots. For plotting, labels are converted to mutually exclusive display bins: `S1 dependent only`, `Acetylated-S1-Favored only`, `Both`, and `S1 unaffected`. This makes genes carrying both active labels visible without also counting them as unaffected. Numbers inside bar segments are observed gene counts. An asterisk marks a display bin whose underlying independent label is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
+The PDFs use horizontal stacked-bar layouts matching the tax result plots. For plotting, labels are converted to mutually exclusive display bins: `S1 dependent only`, `Acetylated-S1-Favored only`, `Both`, and `S1 unaffected`. `S1.pdf` shows each S1 display class as a row with predicted consensus cluster count segments. `S1_fraction.pdf` uses the same rows but shows within-class cluster fractions. `cluster.pdf` shows each consensus cluster as a row with S1 display-class segments. This makes genes carrying both active labels visible without also counting them as unaffected. Numbers inside count-plot bar segments are observed gene counts. An asterisk marks a display bin whose underlying independent label is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
 
 ## Current result
 
@@ -257,21 +381,27 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--database", type=Path, default=ROOT / "data.db")
     parser.add_argument("--classes", type=Path)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--s1-output", type=Path)
+    parser.add_argument("--s1-fraction-output", type=Path)
+    parser.add_argument("--cluster-output", type=Path)
     parser.add_argument("--enrichment-output", type=Path)
     parser.add_argument("--methods-output", type=Path)
     args = parser.parse_args()
     run_dir = threshold_results_dir(args.threshold) / args.run_id
     classes_path = args.classes or threshold_results_dir(args.threshold) / "genes.tsv"
-    output_path = args.output or run_dir / "s1_classification_by_consensus_cluster.pdf"
+    s1_output = args.s1_output or run_dir / "S1.pdf"
+    s1_fraction_output = args.s1_fraction_output or run_dir / "S1_fraction.pdf"
+    cluster_output = args.cluster_output or run_dir / "cluster.pdf"
     enrichment_output = args.enrichment_output or run_dir / "s1_classification_enrichment.tsv"
-    methods_output = args.methods_output or run_dir / "statistical_tests.md"
+    methods_output = args.methods_output or ROOT / "statistical_tests.md"
     merged = load_merged(args.database, classes_path, args.run_id)
     clusters = [int(cluster) for cluster in sorted(merged["cluster"].unique())]
     enrichment = enrichment_table(merged, clusters)
     enrichment_output.parent.mkdir(parents=True, exist_ok=True)
     enrichment.to_csv(enrichment_output, sep="\t", index=False)
-    plot_counts(merged, enrichment, output_path)
+    plot_s1_counts(merged, enrichment, s1_output)
+    plot_s1_fractions(merged, s1_fraction_output)
+    plot_cluster_counts(merged, enrichment, cluster_output)
     methods_output.parent.mkdir(parents=True, exist_ok=True)
     matched_genes = merged["gene_id"].nunique()
     membership_count = int(merged["S1_labels"].map(len).sum())
@@ -280,7 +410,7 @@ def main() -> None:
     significant_count = int(((enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)).sum())
     print(
         f"matched_genes={matched_genes}, classification_memberships={membership_count}, overlaps={overlap_count}, clusters={clusters}, "
-        f"significant_enrichments={significant_count}, saved={output_path}"
+        f"significant_enrichments={significant_count}, saved={s1_output},{s1_fraction_output},{cluster_output}"
     )
 
 

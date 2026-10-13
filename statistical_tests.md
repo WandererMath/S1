@@ -25,7 +25,7 @@ Because multiple cluster-by-class combinations are tested, p-values are adjusted
 
 ## Plot annotation
 
-The PDF uses a horizontal stacked-bar layout matching the tax result plots. For plotting, labels are converted to mutually exclusive display bins: `S1 dependent only`, `Acetylated-S1-Favored only`, `Both`, and `S1 unaffected`. This makes genes carrying both active labels visible without also counting them as unaffected. Numbers inside bar segments are observed gene counts. An asterisk marks a display bin whose underlying independent label is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
+The PDFs use horizontal stacked-bar layouts matching the tax result plots. For plotting, labels are converted to mutually exclusive display bins: `S1 dependent only`, `Acetylated-S1-Favored only`, `Both`, and `S1 unaffected`. `S1.pdf` shows each S1 display class as a row with predicted consensus cluster count segments. `S1_fraction.pdf` uses the same rows but shows within-class cluster fractions. `cluster.pdf` shows each consensus cluster as a row with S1 display-class segments. This makes genes carrying both active labels visible without also counting them as unaffected. Numbers inside count-plot bar segments are observed gene counts. An asterisk marks a display bin whose underlying independent label is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
 
 ## Current result
 
