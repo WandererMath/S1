@@ -15,6 +15,7 @@ from scipy.stats import fisher_exact
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ID = "5-6-7-8"
+DEFAULT_THRESHOLD = 0.58
 ORDER = ["S1_dependent", "Acetylated-S1-Favored", "S1_unaffected"]
 ACTIVE_LABELS = ["S1_dependent", "Acetylated-S1-Favored"]
 DISPLAY_ORDER = [
@@ -41,6 +42,14 @@ DISPLAY_MEMBERSHIPS = {
 
 def quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
+
+
+def threshold_tag(threshold: float) -> str:
+    return str(int(round(threshold * 100)))
+
+
+def threshold_results_dir(threshold: float) -> Path:
+    return ROOT / f"results-{threshold_tag(threshold)}"
 
 
 def parse_classification(value: str) -> list[str]:
@@ -191,7 +200,7 @@ def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Pat
     plt.close(fig)
 
 
-def write_methods(path: Path, run_id: str, matched_genes: int, membership_count: int, overlap_count: int, enrichment_path: Path, enrichment: pd.DataFrame) -> None:
+def write_methods(path: Path, run_id: str, threshold: float, classes_path: Path, matched_genes: int, membership_count: int, overlap_count: int, enrichment_path: Path, enrichment: pd.DataFrame) -> None:
     significant = enrichment[(enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)]
     top = enrichment.sort_values("p_value").head(3)
     top_rows = "\n".join(
@@ -204,7 +213,8 @@ def write_methods(path: Path, run_id: str, matched_genes: int, membership_count:
 ## Inputs
 
 - Consensus prediction column: `{run_id}` in `S1/data.db`
-- Experimental classes: `S1/s1_classified_genes.tsv`
+- Log2FC threshold: `{threshold:g}`
+- Experimental classes: `{classes_path.relative_to(ROOT)}`
 - Tested matched genes: {matched_genes}
 - Plotted classification memberships: {membership_count}
 - Genes assigned both `S1_dependent` and `Acetylated-S1-Favored`: {overlap_count}
@@ -244,27 +254,33 @@ Smallest raw p-values in this run:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", default=RUN_ID)
+    parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--database", type=Path, default=ROOT / "data.db")
-    parser.add_argument("--classes", type=Path, default=ROOT / "s1_classified_genes.tsv")
-    parser.add_argument("--output", type=Path, default=ROOT / f"results/{RUN_ID}/s1_classification_by_consensus_cluster.pdf")
-    parser.add_argument("--enrichment-output", type=Path, default=ROOT / f"results/{RUN_ID}/s1_classification_enrichment.tsv")
-    parser.add_argument("--methods-output", type=Path, default=ROOT / f"results/{RUN_ID}/statistical_tests.md")
+    parser.add_argument("--classes", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--enrichment-output", type=Path)
+    parser.add_argument("--methods-output", type=Path)
     args = parser.parse_args()
-    merged = load_merged(args.database, args.classes, args.run_id)
+    run_dir = threshold_results_dir(args.threshold) / args.run_id
+    classes_path = args.classes or threshold_results_dir(args.threshold) / "genes.tsv"
+    output_path = args.output or run_dir / "s1_classification_by_consensus_cluster.pdf"
+    enrichment_output = args.enrichment_output or run_dir / "s1_classification_enrichment.tsv"
+    methods_output = args.methods_output or run_dir / "statistical_tests.md"
+    merged = load_merged(args.database, classes_path, args.run_id)
     clusters = [int(cluster) for cluster in sorted(merged["cluster"].unique())]
     enrichment = enrichment_table(merged, clusters)
-    args.enrichment_output.parent.mkdir(parents=True, exist_ok=True)
-    enrichment.to_csv(args.enrichment_output, sep="\t", index=False)
-    plot_counts(merged, enrichment, args.output)
-    args.methods_output.parent.mkdir(parents=True, exist_ok=True)
+    enrichment_output.parent.mkdir(parents=True, exist_ok=True)
+    enrichment.to_csv(enrichment_output, sep="\t", index=False)
+    plot_counts(merged, enrichment, output_path)
+    methods_output.parent.mkdir(parents=True, exist_ok=True)
     matched_genes = merged["gene_id"].nunique()
     membership_count = int(merged["S1_labels"].map(len).sum())
     overlap_count = int(merged["S1_display_classification"].eq("S1_dependent_and_Acetylated-S1-Favored").sum())
-    write_methods(args.methods_output, args.run_id, matched_genes, membership_count, overlap_count, args.enrichment_output, enrichment)
+    write_methods(methods_output, args.run_id, args.threshold, classes_path, matched_genes, membership_count, overlap_count, enrichment_output, enrichment)
     significant_count = int(((enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)).sum())
     print(
         f"matched_genes={matched_genes}, classification_memberships={membership_count}, overlaps={overlap_count}, clusters={clusters}, "
-        f"significant_enrichments={significant_count}, saved={args.output}"
+        f"significant_enrichments={significant_count}, saved={output_path}"
     )
 
 
