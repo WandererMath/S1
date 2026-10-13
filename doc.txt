@@ -30,7 +30,7 @@ CLASSIFYING S1-DEPENDENT TRANSLATION INITIATION FROM RNC-SEQ / RNA-SEQ DATA
 * Biological Role (Salmonella): Motility, flagella, nutrient transport, and
   extracellular virulence (SPI-1).
 
-[B] S1-Unaffected / Independent  (-1.0 < log2FC < 1.0)
+[B] S1-Unaffected / Independent  (no active S1 label)
 ------------------------------------------------------
 * Definition: Translation initiation rate is insensitive to S1 functional status.
 * Molecular Mechanism: 30S subunit docks directly via standard 16S rRNA-SD base
@@ -41,9 +41,9 @@ CLASSIFYING S1-DEPENDENT TRANSLATION INITIATION FROM RNC-SEQ / RNA-SEQ DATA
 * Biological Role (Salmonella): Housekeeping proteins, ribosomal proteins,
   and core metabolic machinery.
 
-[C] S1-Repressed / Acetyl-Preferring  (log2FC >= 1.0)
-----------------------------------------------------
-* Definition: Translation initiation increases >= 2-fold when S1 is modified.
+[C] Acetylated-S1-Favored  (K247Q TE >= 2-fold K247R TE)
+---------------------------------------------------------
+* Definition: Translation initiation is favored under the acetylation-mimic condition.
 * Molecular Mechanism: Relieves steric repression caused by canonical S1 binding,
   or favors an alternative binding topology induced by acetylation.
 * 5' UTR Features:
@@ -51,6 +51,10 @@ CLASSIFYING S1-DEPENDENT TRANSLATION INITIATION FROM RNC-SEQ / RNA-SEQ DATA
   - Structures that permit initiation selectively upon ribosome surface remodeling.
 * Biological Role (Salmonella): Intracellular survival programs, arginine
   biosynthesis (ArgR regulon), and macrophage adaptation (SPI-2).
+
+The S1-Dependent and Acetylated-S1-Favored labels are independent. A gene can
+carry both labels. S1-Unaffected is assigned only when neither active label is
+assigned.
 
 
 3. DATA FILTERING RECOMMENDATION

@@ -33,23 +33,34 @@ df["TE_K247R"] = (df["RNC_K247R_mean"] + epsilon) / (
     df["RNA_K247R_mean"] + epsilon
 )
 
-# 4. Calculate log2 Fold Change of TE (K247Q vs WT)
+# 4. Calculate log2 fold changes of TE
 df["log2FC_TE_K247Q_vs_WT"] = np.log2(df["TE_K247Q"] / df["TE_WT"])
+df["log2FC_TE_K247R_vs_WT"] = np.log2(df["TE_K247R"] / df["TE_WT"])
+df["log2FC_TE_K247Q_vs_K247R"] = np.log2(df["TE_K247Q"] / df["TE_K247R"])
 
-# 5. Classify S1 initiation profile
-conditions = [
-    df["log2FC_TE_K247Q_vs_WT"] <= -1.0,
-    df["log2FC_TE_K247Q_vs_WT"] >= 1.0,
-]
-choices = ["S1_dependent", "S1_repressed_or_acetyl_preferring"]
-df["S1_classification"] = np.select(conditions, choices, default="S1_unaffected")
+# 5. Classify S1 initiation profile as independent labels.
+def classify_s1(row):
+    labels = []
+    if row["log2FC_TE_K247Q_vs_WT"] <= -1.0:
+        labels.append("S1_dependent")
+    if row["log2FC_TE_K247Q_vs_K247R"] >= 1.0:
+        labels.append("Acetylated-S1-Favored")
+    if not labels:
+        labels.append("S1_unaffected")
+    return ";".join(labels)
+
+
+df["S1_classification"] = df.apply(classify_s1, axis=1)
 
 # 6. Save results
 output_cols = [
     "geneID",
     "TE_WT",
     "TE_K247Q",
+    "TE_K247R",
     "log2FC_TE_K247Q_vs_WT",
+    "log2FC_TE_K247R_vs_WT",
+    "log2FC_TE_K247Q_vs_K247R",
     "S1_classification",
 ]
 df[output_cols].to_csv("s1_classified_genes.tsv", sep="\t", index=False)

@@ -15,11 +15,27 @@ from scipy.stats import fisher_exact
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ID = "5-6-7-8"
-ORDER = ["S1_dependent", "S1_unaffected", "S1_repressed_or_acetyl_preferring"]
+ORDER = ["S1_dependent", "Acetylated-S1-Favored", "S1_unaffected"]
+ACTIVE_LABELS = ["S1_dependent", "Acetylated-S1-Favored"]
+DISPLAY_ORDER = [
+    "S1_dependent_only",
+    "Acetylated-S1-Favored_only",
+    "S1_dependent_and_Acetylated-S1-Favored",
+    "S1_unaffected",
+]
 LABELS = {
     "S1_dependent": "S1 dependent",
+    "Acetylated-S1-Favored": "Acetylated-S1-Favored",
     "S1_unaffected": "S1 unaffected",
-    "S1_repressed_or_acetyl_preferring": "S1 repressed / acetyl-preferring",
+    "S1_dependent_only": "S1 dependent only",
+    "Acetylated-S1-Favored_only": "Acetylated-S1-Favored only",
+    "S1_dependent_and_Acetylated-S1-Favored": "Both",
+}
+DISPLAY_MEMBERSHIPS = {
+    "S1_dependent_only": ["S1_dependent"],
+    "Acetylated-S1-Favored_only": ["Acetylated-S1-Favored"],
+    "S1_dependent_and_Acetylated-S1-Favored": ["S1_dependent", "Acetylated-S1-Favored"],
+    "S1_unaffected": ["S1_unaffected"],
 }
 
 
@@ -27,8 +43,29 @@ def quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def parse_classification(value: str) -> list[str]:
+    labels = [label.strip() for label in str(value).split(";") if label.strip()]
+    active = [label for label in ACTIVE_LABELS if label in labels]
+    if active:
+        return active
+    return ["S1_unaffected"]
+
+
+def display_classification(labels: list[str]) -> str:
+    label_set = set(labels)
+    if all(label in label_set for label in ACTIVE_LABELS):
+        return "S1_dependent_and_Acetylated-S1-Favored"
+    if "S1_dependent" in label_set:
+        return "S1_dependent_only"
+    if "Acetylated-S1-Favored" in label_set:
+        return "Acetylated-S1-Favored_only"
+    return "S1_unaffected"
+
+
 def load_merged(database: Path, classes_path: Path, run_id: str) -> pd.DataFrame:
     classifications = pd.read_csv(classes_path, sep="\t", usecols=["geneID", "S1_classification"])
+    classifications["S1_labels"] = classifications["S1_classification"].map(parse_classification)
+    classifications["S1_display_classification"] = classifications["S1_labels"].map(display_classification)
     consensus_column = quote_identifier(run_id)
     with sqlite3.connect(database) as connection:
         predictions = pd.read_sql_query(f"""SELECT gene_id, {consensus_column} AS cluster
@@ -57,14 +94,15 @@ def benjamini_hochberg(p_values: list[float]) -> list[float]:
 
 def enrichment_table(merged: pd.DataFrame, clusters: list[int]) -> pd.DataFrame:
     rows = []
-    total = len(merged)
+    total = merged["gene_id"].nunique()
     for cluster in clusters:
-        in_cluster = merged["cluster"] == cluster
-        cluster_total = int(in_cluster.sum())
+        cluster_genes = set(merged.loc[merged["cluster"] == cluster, "gene_id"])
+        cluster_total = len(cluster_genes)
         for classification in ORDER:
-            in_class = merged["S1_classification"] == classification
-            class_total = int(in_class.sum())
-            observed = int((in_cluster & in_class).sum())
+            has_class = merged["S1_labels"].map(lambda labels: classification in labels)
+            class_genes = set(merged.loc[has_class, "gene_id"])
+            class_total = len(class_genes)
+            observed = len(cluster_genes & class_genes)
             table = [
                 [observed, cluster_total - observed],
                 [class_total - observed, total - cluster_total - class_total + observed],
@@ -89,15 +127,15 @@ def enrichment_table(merged: pd.DataFrame, clusters: list[int]) -> pd.DataFrame:
 
 def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Path) -> None:
     counts = (
-        merged.groupby(["cluster", "S1_classification"])
+        merged.groupby(["cluster", "S1_display_classification"])
         .size()
         .unstack(fill_value=0)
-        .reindex(columns=ORDER, fill_value=0)
+        .reindex(columns=DISPLAY_ORDER, fill_value=0)
         .sort_index()
     )
     clusters = counts.index.tolist()
-    colors = plt.get_cmap("tab20")(np.arange(len(ORDER)))
-    class_colors = dict(zip(ORDER, colors))
+    colors = plt.get_cmap("tab20")(np.arange(len(DISPLAY_ORDER)))
+    class_colors = dict(zip(DISPLAY_ORDER, colors))
     significant = {
         (int(row.cluster), row.s1_classification)
         for row in enrichment.itertuples()
@@ -112,13 +150,13 @@ def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Pat
         row = counts.loc[cluster]
         for classification, count in sorted(
             row.items(),
-            key=lambda item: (-item[1], ORDER.index(item[0])),
+            key=lambda item: (-item[1], DISPLAY_ORDER.index(item[0])),
         ):
             if count == 0:
                 continue
             axis.barh(index, count, left=left, height=0.8, color=class_colors[classification])
             if count >= max(8, max_total * 0.035):
-                marker = "*" if (int(cluster), classification) in significant else ""
+                marker = "*" if any((int(cluster), label) in significant for label in DISPLAY_MEMBERSHIPS[classification]) else ""
                 axis.text(
                     left + count / 2,
                     index,
@@ -139,7 +177,7 @@ def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Pat
     axis.set_ylabel("Predicted consensus cluster")
     axis.set_title("Experimental S1 classification counts by predicted consensus cluster")
     axis.legend(
-        handles=[Patch(color=class_colors[classification], label=LABELS[classification]) for classification in ORDER],
+        handles=[Patch(color=class_colors[classification], label=LABELS[classification]) for classification in DISPLAY_ORDER],
         title="S1 classification",
         loc="upper left",
         bbox_to_anchor=(1.02, 1),
@@ -147,14 +185,13 @@ def plot_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_path: Pat
     )
     axis.grid(axis="x", alpha=0.25)
     axis.set_axisbelow(True)
-    fig.text(0.01, 0.01, "* Fisher exact enrichment, BH FDR q < 0.05", fontsize=9)
-    fig.tight_layout(rect=(0, 0.03, 0.8, 1))
+    fig.tight_layout(rect=(0, 0, 0.8, 1))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, format="pdf", dpi=180, bbox_inches="tight")
     plt.close(fig)
 
 
-def write_methods(path: Path, run_id: str, matched_genes: int, enrichment_path: Path, enrichment: pd.DataFrame) -> None:
+def write_methods(path: Path, run_id: str, matched_genes: int, membership_count: int, overlap_count: int, enrichment_path: Path, enrichment: pd.DataFrame) -> None:
     significant = enrichment[(enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)]
     top = enrichment.sort_values("p_value").head(3)
     top_rows = "\n".join(
@@ -169,6 +206,8 @@ def write_methods(path: Path, run_id: str, matched_genes: int, enrichment_path: 
 - Consensus prediction column: `{run_id}` in `S1/data.db`
 - Experimental classes: `S1/s1_classified_genes.tsv`
 - Tested matched genes: {matched_genes}
+- Plotted classification memberships: {membership_count}
+- Genes assigned both `S1_dependent` and `Acetylated-S1-Favored`: {overlap_count}
 - Full test table: `{enrichment_path.name}`
 
 ## Statistical test
@@ -180,13 +219,13 @@ For each consensus cluster and each S1 classification type, the analysis uses a 
 | In this consensus cluster | observed count | cluster total - observed count |
 | In other consensus clusters | class total - observed count | all other matched genes |
 
-This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset.
+This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `S1_dependent` and `Acetylated-S1-Favored` are tested as independent labels, while `S1_unaffected` is assigned only to genes with neither active label.
 
 Because multiple cluster-by-class combinations are tested, p-values are adjusted with the Benjamini-Hochberg false discovery rate procedure across all tests in this run. A cluster/class pair is treated as significantly enriched when `q_value_bh < 0.05` and `fold_enrichment > 1`.
 
 ## Plot annotation
 
-The PDF uses a horizontal stacked-bar layout matching the tax result plots. Numbers inside bar segments are observed counts. An asterisk marks an S1 class that is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
+The PDF uses a horizontal stacked-bar layout matching the tax result plots. For plotting, labels are converted to mutually exclusive display bins: `S1 dependent only`, `Acetylated-S1-Favored only`, `Both`, and `S1 unaffected`. This makes genes carrying both active labels visible without also counting them as unaffected. Numbers inside bar segments are observed gene counts. An asterisk marks a display bin whose underlying independent label is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
 
 ## Current result
 
@@ -218,10 +257,13 @@ def main() -> None:
     enrichment.to_csv(args.enrichment_output, sep="\t", index=False)
     plot_counts(merged, enrichment, args.output)
     args.methods_output.parent.mkdir(parents=True, exist_ok=True)
-    write_methods(args.methods_output, args.run_id, len(merged), args.enrichment_output, enrichment)
+    matched_genes = merged["gene_id"].nunique()
+    membership_count = int(merged["S1_labels"].map(len).sum())
+    overlap_count = int(merged["S1_display_classification"].eq("S1_dependent_and_Acetylated-S1-Favored").sum())
+    write_methods(args.methods_output, args.run_id, matched_genes, membership_count, overlap_count, args.enrichment_output, enrichment)
     significant_count = int(((enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)).sum())
     print(
-        f"matched_genes={len(merged)}, clusters={clusters}, "
+        f"matched_genes={matched_genes}, classification_memberships={membership_count}, overlaps={overlap_count}, clusters={clusters}, "
         f"significant_enrichments={significant_count}, saved={args.output}"
     )
 
