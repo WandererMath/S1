@@ -1,0 +1,62 @@
+{
+  "algorithm": "Leiden (weighted modularity)",
+  "consensus_clusters": {
+    "consensus 1": [
+      "Model 5's class 0",
+      "Model 5's class 1",
+      "Model 5's class 7",
+      "Model 6's class 0",
+      "Model 6's class 6",
+      "Model 6's class 9",
+      "Model 7's class 0",
+      "Model 7's class 2",
+      "Model 7's class 5",
+      "Model 7's class 8",
+      "Model 8's class 0",
+      "Model 8's class 1",
+      "Model 8's class 5",
+      "Model 8's class 6"
+    ],
+    "consensus 2": [
+      "Model 5's class 2",
+      "Model 5's class 3",
+      "Model 5's class 9",
+      "Model 6's class 4",
+      "Model 6's class 7",
+      "Model 6's class 8",
+      "Model 7's class 1",
+      "Model 7's class 3",
+      "Model 8's class 3",
+      "Model 8's class 7"
+    ],
+    "consensus 3": [
+      "Model 5's class 5",
+      "Model 6's class 1",
+      "Model 6's class 3",
+      "Model 7's class 7",
+      "Model 8's class 2",
+      "Model 8's class 9"
+    ],
+    "consensus 4": [
+      "Model 5's class 4",
+      "Model 6's class 5",
+      "Model 7's class 6",
+      "Model 8's class 4"
+    ],
+    "consensus 5": [
+      "Model 5's class 8",
+      "Model 6's class 2",
+      "Model 7's class 9",
+      "Model 8's class 8"
+    ]
+  },
+  "models": [
+    "5",
+    "6",
+    "7",
+    "8"
+  ],
+  "n_nice": 3,
+  "n_sample": 1000000,
+  "run_id": "5-6-7-8"
+}

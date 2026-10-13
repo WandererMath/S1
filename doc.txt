@@ -1,0 +1,61 @@
+================================================================================
+CLASSIFYING S1-DEPENDENT TRANSLATION INITIATION FROM RNC-SEQ / RNA-SEQ DATA
+================================================================================
+
+1. CORE FORMULAS & NORMALIZATION
+--------------------------------------------------------------------------------
+* Normalized Inputs: Read counts must be normalized across sequencing depth
+  and gene length (FPKM, TPM, or TMM-normalized counts).
+* Translation Efficiency (TE):
+      TE = Mean(RNC-seq) / Mean(RNA-seq)
+* Log2 Fold Change of Translation Efficiency (ΔTE):
+      log2FC(TE) = log2( TE_mutant / TE_WT )
+  Where:
+      - WT   : Unmodified / Active S1 (positively charged Lys247)
+      - K247Q: Acetylation-mimic (neutralized S1 RNA-binding interface)
+
+
+2. CLASSIFICATION OUTCOMES
+--------------------------------------------------------------------------------
+
+[A] S1-Dependent  (log2FC <= -1.0)
+----------------------------------
+* Definition: Translation initiation drops >= 2-fold when S1 binding is disrupted.
+* Molecular Mechanism: Positively charged Lys247 is essential to unwind local
+  secondary hairpins and tether single-stranded mRNA to the 30S platform.
+* 5' UTR Features:
+  - Strong local secondary structure (delta G < -6 to -8 kcal/mol) hiding the
+    Shine-Dalgarno (SD) or AUG start codon.
+  - Upstream AU-rich standby tracts (-15 to -40 nt relative to AUG).
+* Biological Role (Salmonella): Motility, flagella, nutrient transport, and
+  extracellular virulence (SPI-1).
+
+[B] S1-Unaffected / Independent  (-1.0 < log2FC < 1.0)
+------------------------------------------------------
+* Definition: Translation initiation rate is insensitive to S1 functional status.
+* Molecular Mechanism: 30S subunit docks directly via standard 16S rRNA-SD base
+  pairing without requiring S1 chaperone assistance.
+* 5' UTR Features:
+  - Unstructured, open 5' UTRs with consensus Shine-Dalgarno motifs (e.g., AGGAGG).
+  - Leaderless mRNAs (0 to 5 nt 5' UTR) translated directly by 70S monosomes.
+* Biological Role (Salmonella): Housekeeping proteins, ribosomal proteins,
+  and core metabolic machinery.
+
+[C] S1-Repressed / Acetyl-Preferring  (log2FC >= 1.0)
+----------------------------------------------------
+* Definition: Translation initiation increases >= 2-fold when S1 is modified.
+* Molecular Mechanism: Relieves steric repression caused by canonical S1 binding,
+  or favors an alternative binding topology induced by acetylation.
+* 5' UTR Features:
+  - Non-canonical 5' UTR architectures lacking standard AU standby sites.
+  - Structures that permit initiation selectively upon ribosome surface remodeling.
+* Biological Role (Salmonella): Intracellular survival programs, arginine
+  biosynthesis (ArgR regulon), and macrophage adaptation (SPI-2).
+
+
+3. DATA FILTERING RECOMMENDATION
+--------------------------------------------------------------------------------
+To prevent false classifications from low-coverage sequencing noise:
+  - Filter out transcripts where Mean(RNA_WT) < 10 or Mean(RNC_WT) < 10.
+  - Add a small pseudocount (epsilon = 1e-3) before computing log2 ratios.
+================================================================================
