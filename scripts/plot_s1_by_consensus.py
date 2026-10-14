@@ -15,28 +15,19 @@ from scipy.stats import fisher_exact
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ID = "5-6-7-8"
-DEFAULT_THRESHOLD = 0.58
-ORDER = ["S1_dependent", "Acetylated-S1-Favored", "S1_unaffected"]
-ACTIVE_LABELS = ["S1_dependent", "Acetylated-S1-Favored"]
-DISPLAY_ORDER = [
-    "S1_dependent_only",
-    "Acetylated-S1-Favored_only",
-    "S1_dependent_and_Acetylated-S1-Favored",
-    "S1_unaffected",
-]
+DEFAULT_THRESHOLD = 1
+ORDER = ["PREFER_PTM", "PREFER_NON_PTM", "NO_PREFER"]
+ACTIVE_LABELS = ["PREFER_PTM", "PREFER_NON_PTM"]
+DISPLAY_ORDER = ORDER
 LABELS = {
-    "S1_dependent": "S1 dependent",
-    "Acetylated-S1-Favored": "Acetylated-S1-Favored",
-    "S1_unaffected": "S1 unaffected",
-    "S1_dependent_only": "S1 dependent only",
-    "Acetylated-S1-Favored_only": "Acetylated-S1-Favored only",
-    "S1_dependent_and_Acetylated-S1-Favored": "Both",
+    "PREFER_PTM": "Prefer PTM",
+    "PREFER_NON_PTM": "Prefer non-PTM",
+    "NO_PREFER": "No preference",
 }
 DISPLAY_MEMBERSHIPS = {
-    "S1_dependent_only": ["S1_dependent"],
-    "Acetylated-S1-Favored_only": ["Acetylated-S1-Favored"],
-    "S1_dependent_and_Acetylated-S1-Favored": ["S1_dependent", "Acetylated-S1-Favored"],
-    "S1_unaffected": ["S1_unaffected"],
+    "PREFER_PTM": ["PREFER_PTM"],
+    "PREFER_NON_PTM": ["PREFER_NON_PTM"],
+    "NO_PREFER": ["NO_PREFER"],
 }
 
 
@@ -54,21 +45,11 @@ def threshold_results_dir(threshold: float) -> Path:
 
 def parse_classification(value: str) -> list[str]:
     labels = [label.strip() for label in str(value).split(";") if label.strip()]
-    active = [label for label in ACTIVE_LABELS if label in labels]
-    if active:
-        return active
-    return ["S1_unaffected"]
+    return [label for label in ORDER if label in labels] or ["NO_PREFER"]
 
 
 def display_classification(labels: list[str]) -> str:
-    label_set = set(labels)
-    if all(label in label_set for label in ACTIVE_LABELS):
-        return "S1_dependent_and_Acetylated-S1-Favored"
-    if "S1_dependent" in label_set:
-        return "S1_dependent_only"
-    if "Acetylated-S1-Favored" in label_set:
-        return "Acetylated-S1-Favored_only"
-    return "S1_unaffected"
+    return next((label for label in ORDER if label in labels), "NO_PREFER")
 
 
 def load_merged(database: Path, classes_path: Path, run_id: str) -> pd.DataFrame:
@@ -324,9 +305,10 @@ def plot_cluster_counts(merged: pd.DataFrame, enrichment: pd.DataFrame, output_p
     plt.close(fig)
 
 
-def write_methods(path: Path, run_id: str, threshold: float, classes_path: Path, matched_genes: int, membership_count: int, overlap_count: int, enrichment_path: Path, enrichment: pd.DataFrame) -> None:
+def write_methods(path: Path, run_id: str, threshold: float, classes_path: Path, matched_genes: int, membership_count: int, enrichment_path: Path, enrichment: pd.DataFrame) -> None:
     significant = enrichment[(enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)]
     top = enrichment.sort_values("p_value").head(3)
+    classes_path_display = classes_path.relative_to(ROOT) if classes_path.is_relative_to(ROOT) else classes_path
     top_rows = "\n".join(
         f"| {int(row.cluster)} | {row.s1_classification} | {row.observed} | {row.fold_enrichment:.3g} | {row.p_value:.3g} | {row.q_value_bh:.3g} |"
         for row in top.itertuples()
@@ -338,10 +320,9 @@ def write_methods(path: Path, run_id: str, threshold: float, classes_path: Path,
 
 - Consensus prediction column: `{run_id}` in `S1/data.db`
 - Log2FC threshold: `{threshold:g}`
-- Experimental classes: `{classes_path.relative_to(ROOT)}`
+- Experimental classes: `{classes_path_display}`
 - Tested matched genes: {matched_genes}
 - Plotted classification memberships: {membership_count}
-- Genes assigned both `S1_dependent` and `Acetylated-S1-Favored`: {overlap_count}
 - Full test table: `{enrichment_path.name}`
 
 ## Statistical test
@@ -353,13 +334,13 @@ For each consensus cluster and each S1 classification type, the analysis uses a 
 | In this consensus cluster | observed count | cluster total - observed count |
 | In other consensus clusters | class total - observed count | all other matched genes |
 
-This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `S1_dependent` and `Acetylated-S1-Favored` are tested as independent labels, while `S1_unaffected` is assigned only to genes with neither active label.
+This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `PREFER_PTM`, `PREFER_NON_PTM`, and `NO_PREFER` are mutually exclusive labels based on the K247Q-versus-K247R TE log2FC.
 
 Because multiple cluster-by-class combinations are tested, p-values are adjusted with the Benjamini-Hochberg false discovery rate procedure across all tests in this run. A cluster/class pair is treated as significantly enriched when `q_value_bh < 0.05` and `fold_enrichment > 1`.
 
 ## Plot annotation
 
-The PDFs use horizontal stacked-bar layouts matching the tax result plots. For plotting, labels are converted to mutually exclusive display bins: `S1 dependent only`, `Acetylated-S1-Favored only`, `Both`, and `S1 unaffected`. `S1.pdf` shows each S1 display class as a row with predicted consensus cluster count segments. `S1_fraction.pdf` uses the same rows but shows within-class cluster fractions. `cluster.pdf` shows each consensus cluster as a row with S1 display-class segments. This makes genes carrying both active labels visible without also counting them as unaffected. Numbers inside count-plot bar segments are observed gene counts. An asterisk marks a display bin whose underlying independent label is significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
+The PDFs use horizontal stacked-bar layouts matching the tax result plots. `S1.pdf` shows each S1 class as a row with predicted consensus cluster count segments. `S1_fraction.pdf` uses the same rows but shows within-class cluster fractions. `cluster.pdf` shows each consensus cluster as a row with S1 class segments. Numbers inside count-plot bar segments are observed gene counts. An asterisk marks a class significantly enriched in that consensus cluster after Benjamini-Hochberg correction.
 
 ## Current result
 
@@ -392,7 +373,7 @@ def main() -> None:
     s1_output = args.s1_output or run_dir / "S1.pdf"
     s1_fraction_output = args.s1_fraction_output or run_dir / "S1_fraction.pdf"
     cluster_output = args.cluster_output or run_dir / "cluster.pdf"
-    enrichment_output = args.enrichment_output or run_dir / "s1_classification_enrichment.tsv"
+    enrichment_output = args.enrichment_output or run_dir / "enrichment.tsv"
     methods_output = args.methods_output or ROOT / "statistical_tests.md"
     merged = load_merged(args.database, classes_path, args.run_id)
     clusters = [int(cluster) for cluster in sorted(merged["cluster"].unique())]
@@ -405,11 +386,10 @@ def main() -> None:
     methods_output.parent.mkdir(parents=True, exist_ok=True)
     matched_genes = merged["gene_id"].nunique()
     membership_count = int(merged["S1_labels"].map(len).sum())
-    overlap_count = int(merged["S1_display_classification"].eq("S1_dependent_and_Acetylated-S1-Favored").sum())
-    write_methods(methods_output, args.run_id, args.threshold, classes_path, matched_genes, membership_count, overlap_count, enrichment_output, enrichment)
+    write_methods(methods_output, args.run_id, args.threshold, classes_path, matched_genes, membership_count, enrichment_output, enrichment)
     significant_count = int(((enrichment["q_value_bh"] < 0.05) & (enrichment["fold_enrichment"] > 1)).sum())
     print(
-        f"matched_genes={matched_genes}, classification_memberships={membership_count}, overlaps={overlap_count}, clusters={clusters}, "
+        f"matched_genes={matched_genes}, classification_memberships={membership_count}, clusters={clusters}, "
         f"significant_enrichments={significant_count}, saved={s1_output},{s1_fraction_output},{cluster_output}"
     )
 
