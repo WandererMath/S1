@@ -3,11 +3,11 @@
 ## Inputs
 
 - Consensus prediction column: `5-6-7-8` in `S1/data.db`
-- Log2FC threshold: `1`
-- Experimental classes: `results-100/genes.tsv`
+- Log2FC threshold: `0.58`
+- Experimental classes: `results-58/genes.tsv`
 - Tested matched genes: 3120
 - Plotted classification memberships: 3120
-- Full test table: `s1_classification_enrichment.tsv`
+- Full test table: `enrichment.tsv`
 
 ## Statistical test
 
@@ -18,7 +18,7 @@ For each consensus cluster and each S1 classification type, the analysis uses a 
 | In this consensus cluster | observed count | cluster total - observed count |
 | In other consensus clusters | class total - observed count | all other matched genes |
 
-This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `PREFER_PTM`, `PREFER_NON_PTM`, and `NO_PREFER` are mutually exclusive labels based on the K247Q-versus-K247R TE log2FC.
+This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `PREFER_PTM`, `PREFER_NON_PTM`, and `NO_PREFER` are mutually exclusive labels based on the K247Q-versus-K247R TE log2FC. Only `PREFER_PTM` and `PREFER_NON_PTM` are tested; `NO_PREFER` is plotted but excluded from statistical testing.
 
 Because multiple cluster-by-class combinations are tested, p-values are adjusted with the Benjamini-Hochberg false discovery rate procedure across all tests in this run. A cluster/class pair is treated as significantly enriched when `q_value_bh < 0.05` and `fold_enrichment > 1`.
 
@@ -28,12 +28,12 @@ The PDFs use horizontal stacked-bar layouts matching the tax result plots. `S1.p
 
 ## Current result
 
-Significant enriched cluster/class pairs at `q_value_bh < 0.05`: 0.
+Significant enriched cluster/class pairs at `q_value_bh < 0.05`: 1.
 
 Smallest raw p-values in this run:
 
 | Cluster | S1 classification | Observed | Fold enrichment | p-value | BH q-value |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 5 | PREFER_NON_PTM | 8 | 2.74 | 0.00801 | 0.12 |
-| 3 | PREFER_NON_PTM | 23 | 1.44 | 0.0371 | 0.255 |
-| 1 | NO_PREFER | 363 | 1.02 | 0.0579 | 0.255 |
+| 5 | PREFER_NON_PTM | 16 | 2.33 | 0.00106 | 0.0106 |
+| 2 | PREFER_PTM | 132 | 1.1 | 0.0528 | 0.264 |
+| 3 | PREFER_NON_PTM | 42 | 1.12 | 0.224 | 0.747 |

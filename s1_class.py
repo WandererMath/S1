@@ -53,7 +53,7 @@ def build_classifications(raw_path: Path, threshold: float) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Classify S1 initiation labels from raw RNC/RNA data.")
-    parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
+    parser.add_argument("threshold", nargs="?", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--raw", type=Path, default=ROOT / "raw.tsv")
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()

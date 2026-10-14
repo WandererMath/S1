@@ -88,7 +88,7 @@ def enrichment_table(merged: pd.DataFrame, clusters: list[int]) -> pd.DataFrame:
     for cluster in clusters:
         cluster_genes = set(merged.loc[merged["cluster"] == cluster, "gene_id"])
         cluster_total = len(cluster_genes)
-        for classification in ORDER:
+        for classification in ACTIVE_LABELS:
             has_class = merged["S1_labels"].map(lambda labels: classification in labels)
             class_genes = set(merged.loc[has_class, "gene_id"])
             class_total = len(class_genes)
@@ -334,7 +334,7 @@ For each consensus cluster and each S1 classification type, the analysis uses a 
 | In this consensus cluster | observed count | cluster total - observed count |
 | In other consensus clusters | class total - observed count | all other matched genes |
 
-This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `PREFER_PTM`, `PREFER_NON_PTM`, and `NO_PREFER` are mutually exclusive labels based on the K247Q-versus-K247R TE log2FC.
+This test asks whether the S1 classification is enriched inside the cluster compared with all other assigned clusters. Fisher exact test is appropriate here because each test is a 2x2 categorical count comparison and remains valid for small or imbalanced cluster/class counts, which occur in this dataset. `PREFER_PTM`, `PREFER_NON_PTM`, and `NO_PREFER` are mutually exclusive labels based on the K247Q-versus-K247R TE log2FC. Only `PREFER_PTM` and `PREFER_NON_PTM` are tested; `NO_PREFER` is plotted but excluded from statistical testing.
 
 Because multiple cluster-by-class combinations are tested, p-values are adjusted with the Benjamini-Hochberg false discovery rate procedure across all tests in this run. A cluster/class pair is treated as significantly enriched when `q_value_bh < 0.05` and `fold_enrichment > 1`.
 
@@ -359,7 +359,7 @@ Smallest raw p-values in this run:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", default=RUN_ID)
-    parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
+    parser.add_argument("threshold", nargs="?", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--database", type=Path, default=ROOT / "data.db")
     parser.add_argument("--classes", type=Path)
     parser.add_argument("--s1-output", type=Path)
